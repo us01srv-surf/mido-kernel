@@ -1,0 +1,17 @@
+# agent / tooling scratch — never push
+.omo/
+.omo
+.codegraph/
+.codegraph
+.omo/
+*.omo*
+*.codegraph*
+opencode.json*
+# local scratch zips / tarballs
+*.zip
+*.tar.gz
+!firmware/rtlwifi/*.bin
+# build-noise if anyone runs locally
+out/
+*.o
+*.cmd

@@ -1,0 +1,102 @@
+name: Build mido 4.9 NetHunter kernel (nRF52 BLE + RTL8192EU hotplug)
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'KudProject 4.9 commit to build (default: lineage-17.1 HEAD)'
+        required: false
+        default: ''
+  push:
+    branches: [ main, master ]
+
+env:
+  KERNEL_REPO: KudProject/kernel_xiaomi_msm8953-4.9
+  KERNEL_BRANCH: lineage-17.1
+  DEFCONFIG: mido_defconfig
+  ZIP_NAME: Black-Hydra-Serp3n7-mido-4.9-nrf52-rtl8192eu.zip
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout kit (AnyKernel3 + firmware blob + patches)
+        uses: actions/checkout@v4
+
+      - name: Checkout KudProject msm8953 4.9 mido kernel @ lineage-17.1
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KERNEL_REPO }}
+          ref: ${{ github.event.inputs.commit || env.KERNEL_BRANCH }}
+          path: kernel
+          fetch-depth: 1
+
+      - name: Install cross toolchain (GCC 9 / aarch64)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            git make bc cpio kmod zip xz-utils file \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            libc6-dev-arm64-cross libssl-dev flex bison libelf-dev elfutils \
+            device-tree-compiler
+          aarch64-linux-gnu-gcc --version | head -1
+
+      - name: Apply defconfig additions (nRF52 BLE + RTL8192EU embedded fw)
+        run: |
+          cd kernel
+          DEFCONF=arch/arm64/configs/mido_defconfig
+          test -f "$DEFCONF" || { echo "!! mido_defconfig not found"; exit 1; }
+          cp "$DEFCONF" "$DEFCONF.orig"
+          cat ../patch/mido-defconfig-additions.cfg >> "$DEFCONF"
+          echo "---- appended block ----"
+          tail -14 "$DEFCONF"
+
+      - name: Stage RTL8192EU firmware blob into kernel tree
+        run: |
+          cd kernel
+          mkdir -p firmware/rtlwifi
+          if [ -f ../firmware/rtlwifi/rtl8192eu_nic.bin ]; then
+            cp ../firmware/rtlwifi/rtl8192eu_nic.bin firmware/rtlwifi/rtl8192eu_nic.bin
+            echo "Firmware staged: $(stat -c%s firmware/rtlwifi/rtl8192eu_nic.bin) bytes"
+          else
+            echo "::warning::rtl8192eu_nic.bin missing -> RTL8192EU fw NOT embedded (nRF52 unaffected)"
+          fi
+
+      - name: Build kernel + modules
+        run: |
+          cd kernel
+          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+          make "$DEFCONFIG"
+          make -j"$(nproc)" Image.gz-dtb
+          make -j"$(nproc)" modules
+          ls -la arch/arm64/boot/
+
+      - name: Assemble AnyKernel3 flashable zip (NetHunter-style)
+        run: |
+          set -e
+          AK3=AnyKernel3
+          if [ ! -d "$AK3" ]; then
+            curl -sL --max-time 60 -o ak3.tar.gz \
+              https://github.com/osm0sis/AnyKernel3/archive/refs/heads/master.tar.gz
+            tar -xzf ak3.tar.gz
+            mv AnyKernel3-master "$AK3"
+          fi
+          rm -rf "$AK3"/Image* "$AK3"/dtb* "$AK3"/modules 2>/dev/null || true
+          cp kernel/arch/arm64/boot/Image.gz-dtb "$AK3/"Image.gz-dtb
+          # NetHunter banner
+          printf 'Black-Hydra-Serp3n7 | mido 4.9 NetHunter kernel (nRF52 BLE + RTL8192EU)\n' > "$AK3/banner"
+          # modules -> systemless
+          mkdir -p "$AK3/modules/system_root/lib/modules"
+          make -C kernel ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            INSTALL_MOD_PATH="$PWD/$AK3/modules/system_root" modules_install 2>/dev/null || true
+          cd "$AK3"
+          zip -r9 "../$ZIP_NAME" . -x '*.git*' '*/\.*'
+          cd ..
+          ls -la "$ZIP_NAME"
+
+      - name: Upload kernel zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: mido-nethunter-kernel
+          path: ${{ github.workspace }}/${{ env.ZIP_NAME }}
+          if-no-files-found: error
