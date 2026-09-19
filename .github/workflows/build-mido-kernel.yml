@@ -108,6 +108,24 @@ jobs:
           # assert the known offender is fixed
           grep -n 'include.*kgsl_device.h' drivers/gpu/msm/kgsl_events.c
 
+      - name: Fix cross-directory quoted includes in camera_v2-legacy (msm_isp.h etc.)
+        run: |
+          cd kernel
+          # camera_v2-legacy/isp/Makefile omits -I<isp> itself, so trace headers
+          # in include/trace/events/ that #include "msm_isp.h" fail under GCC
+          # (GCC does NOT search the includer's directory chain for quoted
+          # includes — only the including file's own dir + -I paths).
+          ISP_MK="drivers/media/platform/msm/camera_v2-legacy/isp/Makefile"
+          if ! grep -q 'camera_v2-legacy/isp"' "$ISP_MK"; then
+            sed -i '1i ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/isp' "$ISP_MK"
+            echo "patched: $ISP_MK (added -I.../isp)"
+          fi
+          # Fix typo in top-level Makefile: isps -> isp
+          TOP_MK="drivers/media/platform/msm/camera_v2-legacy/Makefile"
+          sed -i 's|camera_v2-legacy/isps"|camera_v2-legacy/isp"|g' "$TOP_MK"
+          echo "--- $ISP_MK ---"
+          head -8 "$ISP_MK"
+
       - name: Build kernel + modules
         run: |
           cd kernel
