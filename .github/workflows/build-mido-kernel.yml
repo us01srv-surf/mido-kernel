@@ -40,6 +40,7 @@ jobs:
           sudo apt-get install -y -qq \
             git make bc cpio kmod zip xz-utils file \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
             libc6-dev-arm64-cross libssl-dev flex bison libelf-dev elfutils \
             device-tree-compiler
           aarch64-linux-gnu-gcc --version | head -1
@@ -69,6 +70,9 @@ jobs:
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+          # mido_defconfig sets CONFIG_COMPAT=y; 4.9 arch/arm64 hard-errors
+          # without a 32-bit cross compiler for the compat vDSO
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabihf-
           make "$DEFCONFIG"
           make -j"$(nproc)" Image.gz-dtb
           make -j"$(nproc)" modules
