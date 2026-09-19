@@ -66,6 +66,24 @@ jobs:
             echo "::warning::rtl8192eu_nic.bin missing -> RTL8192EU fw NOT embedded (nRF52 unaffected)"
           fi
 
+      - name: Fix TRACE_INCLUDE_PATH for GCC (header re-include by path)
+        run: |
+          cd kernel
+          # KudProject 4.9 trace headers set TRACE_INCLUDE_PATH to '.', which
+          # GCC expands (define_trace.h:88) to '#include "./<h>"' resolved
+          # relative to include/trace/ -> fatal (kgsl_trace.h etc). Canonical
+          # form (already used by sync_trace.h) is ../../<dir> from include/trace/.
+          before=$(grep -rl '^#define[[:space:]]\+TRACE_INCLUDE_PATH[[:space:]]\+\.$' --include='*.h' . | wc -l)
+          grep -rl '^#define[[:space:]]\+TRACE_INCLUDE_PATH[[:space:]]\+\.$' --include='*.h' . | while read -r f; do
+            f="${f#./}"
+            d="$(dirname "$f")"
+            sed -i "s|^#define[[:space:]]\+TRACE_INCLUDE_PATH[[:space:]]\+\.$|#define TRACE_INCLUDE_PATH ../../$d|" "$f"
+            echo "patched: $f -> ../../$d"
+          done
+          after=$(grep -rl '^#define[[:space:]]\+TRACE_INCLUDE_PATH[[:space:]]\+\.$' --include='*.h' . | wc -l)
+          echo "broken TRACE_INCLUDE_PATH headers: $before -> $after"
+          test "$after" -eq 0 || { echo "::error::unfixed TRACE_INCLUDE_PATH headers remain"; exit 1; }
+
       - name: Build kernel + modules
         run: |
           cd kernel
