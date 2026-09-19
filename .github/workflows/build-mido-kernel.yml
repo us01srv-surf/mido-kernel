@@ -108,23 +108,57 @@ jobs:
           # assert the known offender is fixed
           grep -n 'include.*kgsl_device.h' drivers/gpu/msm/kgsl_events.c
 
-      - name: Fix cross-directory quoted includes in camera_v2-legacy (msm_isp.h etc.)
+      - name: Fix camera_v2-legacy cross-directory includes for GCC (comprehensive)
         run: |
           cd kernel
-          # camera_v2-legacy/isp/Makefile omits -I<isp> itself, so trace headers
-          # in include/trace/events/ that #include "msm_isp.h" fail under GCC
-          # (GCC does NOT search the includer's directory chain for quoted
-          # includes — only the including file's own dir + -I paths).
+          # GCC does NOT search the includer's directory chain for quoted
+          # includes — only the including file's own dir + -I paths. The
+          # legacy camera driver tree has many cross-directory #include "foo.h"
+          # chains (e.g. msm_cam-legacy.h -> msm_isp.h, msm_sensor.h ->
+          # msm_camera_i2c.h) that fail one-by-one under GCC.
+          #
+          # Fix: inject subdir-ccflags-y with the FULL union of all -I paths
+          # from every Makefile in the tree, so every compilation unit inherits
+          # all camera_v2-legacy include dirs. Zero duplicate basenames in the
+          # tree (verified) — no shadowing risk.
+          TOP_MK="drivers/media/platform/msm/camera_v2-legacy/Makefile"
+
+          # Fix typo: isps -> isp
+          sed -i 's|camera_v2-legacy/isps"|camera_v2-legacy/isp"|g' "$TOP_MK"
+
+          # Append comprehensive subdir-ccflags-y if not already present
+          if ! grep -q 'subdir-ccflags-y' "$TOP_MK"; then
+            cat >> "$TOP_MK" << 'ENDOFINCLUDES'
+
+# GCC: inherit all camera_v2-legacy -I paths to fix cross-directory quoted includes
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/io
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/cci
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/common
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_vb2
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/camera
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/codecs
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/isp
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc/cpp
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_buf_mgr
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/fd
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_10
+subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_dma
+ENDOFINCLUDES
+            echo "patched: $TOP_MK (added subdir-ccflags-y with full include union)"
+          fi
+
+          # Belt-and-suspenders: also ensure isp/Makefile has its own -I
           ISP_MK="drivers/media/platform/msm/camera_v2-legacy/isp/Makefile"
           if ! grep -q 'camera_v2-legacy/isp"' "$ISP_MK"; then
             sed -i '1i ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/isp' "$ISP_MK"
             echo "patched: $ISP_MK (added -I.../isp)"
           fi
-          # Fix typo in top-level Makefile: isps -> isp
-          TOP_MK="drivers/media/platform/msm/camera_v2-legacy/Makefile"
-          sed -i 's|camera_v2-legacy/isps"|camera_v2-legacy/isp"|g' "$TOP_MK"
-          echo "--- $ISP_MK ---"
-          head -8 "$ISP_MK"
+
+          echo "=== top Makefile tail ==="
+          tail -20 "$TOP_MK"
 
       - name: Build kernel + modules
         run: |
