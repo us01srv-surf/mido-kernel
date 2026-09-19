@@ -126,27 +126,26 @@ jobs:
           # Fix typo: isps -> isp
           sed -i 's|camera_v2-legacy/isps"|camera_v2-legacy/isp"|g' "$TOP_MK"
 
-          # Append comprehensive subdir-ccflags-y if not already present
           if ! grep -q 'subdir-ccflags-y' "$TOP_MK"; then
-            cat >> "$TOP_MK" << 'ENDOFINCLUDES'
-
-# GCC: inherit all camera_v2-legacy -I paths to fix cross-directory quoted includes
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/io
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/cci
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/common
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_vb2
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/camera
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/codecs
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/isp
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc/cpp
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_buf_mgr
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/fd
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_10
-subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_dma
-ENDOFINCLUDES
+            printf '%s\n' \
+              '' \
+              '# GCC: inherit all camera_v2-legacy -I paths to fix cross-directory quoted includes' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/io' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/sensor/cci' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/common' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_vb2' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/camera' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/codecs' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/isp' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/pproc/cpp' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/msm_buf_mgr' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/fd' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_10' \
+              'subdir-ccflags-y += -Idrivers/media/platform/msm/camera_v2-legacy/jpeg_dma' \
+              >> "$TOP_MK"
             echo "patched: $TOP_MK (added subdir-ccflags-y with full include union)"
           fi
 
