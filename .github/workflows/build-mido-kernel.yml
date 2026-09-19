@@ -84,6 +84,30 @@ jobs:
           echo "broken TRACE_INCLUDE_PATH headers: $before -> $after"
           test "$after" -eq 0 || { echo "::error::unfixed TRACE_INCLUDE_PATH headers remain"; exit 1; }
 
+      - name: Fix local angle-bracket includes for GCC (quote same-dir headers)
+        run: |
+          cd kernel
+          # GCC resolves <X.h> only via -I include paths. msm8953 4.9 driver
+          # sources include their own same-dir headers with <> (e.g.
+          # kgsl_events.c:18 <kgsl_device.h>) while the driver Makefile sets
+          # no -I for its own dir -> fatal. Quoted form makes GCC search the
+          # including file's dir first (standard search order), which is how
+          # every other kgsl/adreno source includes local headers.
+          total=0
+          while IFS= read -r f; do
+            d="$(dirname "$f")"
+            while IFS= read -r hdr; do
+              [ -f "$d/$hdr" ] || continue
+              grep -q "#include <$hdr>" "$f" || continue
+              sed -i "s|#include <$hdr>|#include \"$hdr\"|g" "$f"
+              total=$((total+1))
+              echo "quoted: $f: <$hdr> -> \"$hdr\""
+            done < <(grep -oE '#include <[a-zA-Z0-9_]+\.h>' "$f" | sed -E 's/#include <([^>]+)>/\1/' | sort -u)
+          done < <(find . -name '*.c' -type f)
+          echo "same-dir angle includes quoted: $total"
+          # assert the known offender is fixed
+          grep -n 'include.*kgsl_device.h' drivers/gpu/msm/kgsl_events.c
+
       - name: Build kernel + modules
         run: |
           cd kernel
