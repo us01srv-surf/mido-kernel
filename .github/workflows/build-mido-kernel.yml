@@ -18,7 +18,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    # NOTE: ubuntu-20.04 was retired by GitHub (April 2025) — jobs on that label
+    # queue forever with no runner. 22.04 + GCC 11 aarch64 cross is the right
+    # combo for the msm8953 4.9 tree (24.04's GCC 13/binutils 2.42 breaks 4.9).
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout kit (AnyKernel3 + firmware blob + patches)
         uses: actions/checkout@v4
