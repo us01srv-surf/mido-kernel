@@ -233,6 +233,9 @@ jobs:
           fi
           rm -rf "$AK3"/Image* "$AK3"/dtb* "$AK3"/modules 2>/dev/null || true
           cp kernel/arch/arm64/boot/Image.gz-dtb "$AK3/"Image.gz-dtb
+          # stock AK3 ships the osm0sis tuna (OMAP) example script: its device
+          # check rejects mido and BLOCK points at an omap partition path
+          cp patch/anykernel.sh "$AK3/"anykernel.sh
           # NetHunter banner
           printf 'Black-Hydra-Serp3n7 | mido 4.9 NetHunter kernel (nRF52 BLE + RTL8192EU)\n' > "$AK3/banner"
           # modules -> systemless
