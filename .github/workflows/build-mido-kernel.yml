@@ -169,6 +169,50 @@ jobs:
           # without a 32-bit cross compiler for the compat vDSO
           export CROSS_COMPILE_ARM32=arm-linux-gnueabihf-
           make "$DEFCONFIG"
+          # ---- final .config assertions ---------------------------------
+          # olddefconfig silently drops symbols whose deps are unmet (it has
+          # bitten us twice: SLIMBUS under a missing parent, RTL8XXXU_UNTESTED
+          # never present). Fail here with a precise message instead of a
+          # confusing vmlinux link error minutes later.
+          fail=0
+          for want in \
+            CONFIG_SLIMBUS=y \
+            CONFIG_SLIMBUS_MSM_NGD=y \
+            CONFIG_BT=y \
+            CONFIG_USB_SERIAL=y \
+            CONFIG_USB_ACM=y \
+            CONFIG_USB_SERIAL_CH341=y \
+            CONFIG_USB_SERIAL_CP210X=y \
+            CONFIG_USB_SERIAL_FTDI_SIO=y \
+            CONFIG_USB_SERIAL_PL2303=y \
+            CONFIG_USB_CONFIGFS=y \
+            CONFIG_USB_CONFIGFS_SERIAL=y \
+            CONFIG_USB_CONFIGFS_ACM=y \
+            CONFIG_USB_CONFIGFS_NCM=y \
+            CONFIG_USB_CONFIGFS_RNDIS=y \
+            CONFIG_USB_CONFIGFS_MASS_STORAGE=y \
+            CONFIG_USB_CONFIGFS_F_HID=y \
+            CONFIG_USB_CONFIGFS_OBEX=y \
+            CONFIG_USB_CONFIGFS_ECM=y \
+            CONFIG_USB_CONFIGFS_ECM_SUBSET=y \
+            CONFIG_USB_CONFIGFS_EEM=y \
+            CONFIG_RTL8XXXU=y \
+            CONFIG_RTL8XXXU_UNTESTED=y \
+            'CONFIG_EXTRA_FIRMWARE="rtlwifi/rtl8192eu_nic.bin"' \
+            'CONFIG_EXTRA_FIRMWARE_DIR="firmware"'
+          do
+            grep -qxF "$want" .config || { echo "::error::olddefconfig dropped required symbol: $want"; fail=1; }
+          done
+          # link-vmlinux.sh / adjust_autoksyms.sh source .config as shell
+          # under set -e — any $(...) is executed as a command substitution
+          # and kills the link with exit 127.
+          if grep -qE '=[^#]*\$\(' .config; then
+            echo "::error::shell-hostile \$(...) in final .config:"
+            grep -E '=[^#]*\$\(' .config
+            fail=1
+          fi
+          test "$fail" -eq 0 || exit 1
+          # ---- end assertions -------------------------------------------
           make -j"$(nproc)" Image.gz-dtb
           make -j"$(nproc)" modules
           ls -la arch/arm64/boot/
