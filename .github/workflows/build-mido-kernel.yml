@@ -173,6 +173,23 @@ jobs:
           echo "=== top Makefile tail ==="
           tail -20 "$TOP_MK"
 
+      - name: Neutralize AOSP-only clang --prefix (distro clang hard-errors)
+        run: |
+          cd kernel
+          # Their Makefile appends --prefix=<toolchain>/aarch64-linux-gnu- to
+          # CLANG_FLAGS — an argument ONLY AOSP-patched clang understands.
+          # Stock clang (Ubuntu) errors "unknown argument", and with
+          # -Werror=unknown-warning-option every cc-option probe fails ->
+          # "Cannot use CONFIG_CC_STACKPROTECTOR_STRONG". --gcc-toolchain +
+          # PATH already locate aarch64-linux-gnu-{as,ld}; drop --prefix.
+          if grep -q 'CLANG_FLAGS.*--prefix=' Makefile; then
+            sed -i 's|^\(CLANG_FLAGS[[:space:]]*+=[[:space:]]*\)--prefix=.*|# distro clang has no --prefix: \1(removed)|' Makefile
+            echo "patched Makefile: --prefix removed"
+          else
+            echo "no --prefix line found (already clean)"
+          fi
+          grep -n 'CLANG_FLAGS.*prefix\|gcc-toolchain' Makefile | head -5
+
       - name: Build kernel + modules
         run: |
           cd kernel
@@ -193,6 +210,10 @@ jobs:
           for want in \
             CONFIG_SLIMBUS=y \
             CONFIG_SLIMBUS_MSM_NGD=y \
+            CONFIG_BTFM_SLIM=y \
+            CONFIG_BTFM_SLIM_WCN3990=y \
+            '# CONFIG_CRYPTO_DEV_QCOM_ICE is not set' \
+            '# CONFIG_EXT4_FS_ICE_ENCRYPTION is not set' \
             CONFIG_BT=y \
             CONFIG_BT_LE=y \
             CONFIG_BT_HCIBTUSB=y \
