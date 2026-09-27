@@ -15,3 +15,5 @@ opencode.json*
 out/
 *.o
 *.cmd
+SESSION.md
+.opencode/
