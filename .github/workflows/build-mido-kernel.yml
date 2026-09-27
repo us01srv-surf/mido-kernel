@@ -179,6 +179,8 @@ jobs:
             CONFIG_SLIMBUS=y \
             CONFIG_SLIMBUS_MSM_NGD=y \
             CONFIG_BT=y \
+            CONFIG_BT_LE=y \
+            CONFIG_BT_HCIBTUSB=y \
             CONFIG_USB_SERIAL=y \
             CONFIG_USB_ACM=y \
             CONFIG_USB_SERIAL_CH341=y \
@@ -198,6 +200,8 @@ jobs:
             CONFIG_USB_CONFIGFS_EEM=y \
             CONFIG_RTL8XXXU=y \
             CONFIG_RTL8XXXU_UNTESTED=y \
+            CONFIG_WLAN_VENDOR_REALTEK=y \
+            CONFIG_MAC80211=y \
             'CONFIG_EXTRA_FIRMWARE="rtlwifi/rtl8192eu_nic.bin"' \
             'CONFIG_EXTRA_FIRMWARE_DIR="firmware"'
           do
