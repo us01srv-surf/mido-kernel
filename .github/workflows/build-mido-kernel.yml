@@ -55,21 +55,31 @@ jobs:
             device-tree-compiler
           # Exact production toolchain (their BoardConfig pins
           # TARGET_KERNEL_CLANG_VERSION := r510928).
-          # googlesource intermittently serves 503 HTML pages — validate the
-          # download is a real gzip >100MB and retry before extracting.
+          # googlesource 503s under rate limit (1459-byte HTML error pages), so try
+          # a sha256-pinned GitHub release mirror FIRST, googlesource as fallback.
           if [ ! -x "$HOME/aosp-clang/bin/clang" ]; then
             mkdir -p "$HOME/aosp-clang"
             ok=0
+            MIRROR="https://github.com/ravindu644/Android-Kernel-Tutorials/releases/download/toolchains/clang-r510928.tar.gz"
+            MIRROR_SHA="b2e903f7a32477172f088a8e912b601c4b2016dd904e45cb6397a0b623c89e55"
+            GS_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r50/clang-r510928.tar.gz"
             for i in 1 2 3 4 5 6; do
-              curl -sL --retry 3 --max-time 600 -o /tmp/aosp-clang.tar.gz \
-                "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r50/clang-r510928.tar.gz" || true
+              # 1st choice: pinned mirror (byte-exact verified, not rate-limited)
+              curl -sL --retry 3 --max-time 900 -o /tmp/aosp-clang.tar.gz "$MIRROR" || true
               sz=$(stat -c%s /tmp/aosp-clang.tar.gz 2>/dev/null || echo 0)
-              if file /tmp/aosp-clang.tar.gz | grep -q 'gzip compressed' && [ "$sz" -gt 100000000 ]; then
-                echo "download ok: $sz bytes (attempt $i)"
+              got=$(sha256sum /tmp/aosp-clang.tar.gz 2>/dev/null | cut -d' ' -f1 || echo "")
+              if [ "$got" = "$MIRROR_SHA" ]; then
+                echo "mirror ok: sha256 match ($sz bytes, attempt $i)"
                 ok=1; break
               fi
-              echo "attempt $i: bad archive (size=$sz) -> retrying in $((i*10))s"
-              file /tmp/aosp-clang.tar.gz || true
+              # 2nd choice: googlesource direct (gzip magic + size sanity)
+              curl -sL --retry 3 --max-time 900 -o /tmp/aosp-clang.tar.gz "$GS_URL" || true
+              sz=$(stat -c%s /tmp/aosp-clang.tar.gz 2>/dev/null || echo 0)
+              if file /tmp/aosp-clang.tar.gz | grep -q 'gzip compressed' && [ "$sz" -gt 100000000 ]; then
+                echo "googlesource ok: $sz bytes (attempt $i, unverified sha)"
+                ok=1; break
+              fi
+              echo "attempt $i: both sources bad (mirror_sha=${got:0:12} gs_size=$sz) -> retrying in $((i*10))s"
               sleep $((i*10))
             done
             [ "$ok" -eq 1 ] || { echo "::error::AOSP clang download failed after retries"; exit 1; }
