@@ -38,17 +38,27 @@ jobs:
           path: kernel
           fetch-depth: 1
 
-      - name: Install toolchain (clang 14 + aarch64/armhf cross GCC)
+      - name: Install toolchain (AOSP clang r510928 + cross binutils)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             git make bc cpio kmod zip xz-utils file \
-            clang lld \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
             libc6-dev-arm64-cross libssl-dev flex bison libelf-dev elfutils \
             device-tree-compiler
-          clang --version | head -1
+          # Exact production toolchain (their BoardConfig pins
+          # TARGET_KERNEL_CLANG_VERSION := r510928). Their Makefile probes
+          # flags with -Werror and AOSP-only args (--prefix); distro clang
+          # fails those probes ("Cannot use CONFIG_CC_STACKPROTECTOR_STRONG").
+          mkdir -p "$HOME/aosp-clang"
+          curl -sL --retry 3 --max-time 600 -o /tmp/aosp-clang.tar.gz \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r50/clang-r510928.tar.gz"
+          tar -xzf /tmp/aosp-clang.tar.gz -C "$HOME/aosp-clang"
+          rm -f /tmp/aosp-clang.tar.gz
+          echo "$HOME/aosp-clang/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/aosp-clang/bin:$PATH"
+          clang --version | head -2
           aarch64-linux-gnu-gcc --version | head -1
 
       - name: Apply defconfig additions (nRF52 BLE + RTL8192EU embedded fw)
