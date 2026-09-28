@@ -200,6 +200,19 @@ jobs:
           fi
           grep -n 'CLANG_FLAGS.*prefix\|gcc-toolchain' Makefile | head -5
 
+      - name: "Debug: instrument cc-option probes (prints exact failing command)"
+        run: |
+          cd kernel
+          python3 - <<'PY'
+          p = 'scripts/Kbuild.include'
+          s = open(p).read()
+          old = '__cc-option = $(call try-run,'
+          new = '__cc-option = $(info CC-OPT [$(1)] CPP/CFLAGS: $(2) TEST: $(3))$(call try-run,'
+          assert old in s, 'cc-option pattern not found'
+          open(p, 'w').write(s.replace(old, new, 1))
+          print('instrumented cc-option')
+          PY
+
       - name: Build kernel + modules
         run: |
           cd kernel
