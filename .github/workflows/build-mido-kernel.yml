@@ -38,6 +38,12 @@ jobs:
           path: kernel
           fetch-depth: 1
 
+      - name: Restore AOSP clang cache
+        uses: actions/cache@v4
+        with:
+          path: ~/aosp-clang
+          key: aosp-clang-r510928
+
       - name: Install toolchain (AOSP clang r510928 + cross binutils)
         run: |
           sudo apt-get update -qq
@@ -48,14 +54,30 @@ jobs:
             libc6-dev-arm64-cross libssl-dev flex bison libelf-dev elfutils \
             device-tree-compiler
           # Exact production toolchain (their BoardConfig pins
-          # TARGET_KERNEL_CLANG_VERSION := r510928). Their Makefile probes
-          # flags with -Werror and AOSP-only args (--prefix); distro clang
-          # fails those probes ("Cannot use CONFIG_CC_STACKPROTECTOR_STRONG").
-          mkdir -p "$HOME/aosp-clang"
-          curl -sL --retry 3 --max-time 600 -o /tmp/aosp-clang.tar.gz \
-            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r50/clang-r510928.tar.gz"
-          tar -xzf /tmp/aosp-clang.tar.gz -C "$HOME/aosp-clang"
-          rm -f /tmp/aosp-clang.tar.gz
+          # TARGET_KERNEL_CLANG_VERSION := r510928).
+          # googlesource intermittently serves 503 HTML pages — validate the
+          # download is a real gzip >100MB and retry before extracting.
+          if [ ! -x "$HOME/aosp-clang/bin/clang" ]; then
+            mkdir -p "$HOME/aosp-clang"
+            ok=0
+            for i in 1 2 3 4 5 6; do
+              curl -sL --retry 3 --max-time 600 -o /tmp/aosp-clang.tar.gz \
+                "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r50/clang-r510928.tar.gz" || true
+              sz=$(stat -c%s /tmp/aosp-clang.tar.gz 2>/dev/null || echo 0)
+              if file /tmp/aosp-clang.tar.gz | grep -q 'gzip compressed' && [ "$sz" -gt 100000000 ]; then
+                echo "download ok: $sz bytes (attempt $i)"
+                ok=1; break
+              fi
+              echo "attempt $i: bad archive (size=$sz) -> retrying in $((i*10))s"
+              file /tmp/aosp-clang.tar.gz || true
+              sleep $((i*10))
+            done
+            [ "$ok" -eq 1 ] || { echo "::error::AOSP clang download failed after retries"; exit 1; }
+            tar -xzf /tmp/aosp-clang.tar.gz -C "$HOME/aosp-clang"
+            rm -f /tmp/aosp-clang.tar.gz
+          else
+            echo "clang restored from cache"
+          fi
           echo "$HOME/aosp-clang/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/aosp-clang/bin:$PATH"
           clang --version | head -2
