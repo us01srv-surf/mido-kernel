@@ -217,13 +217,18 @@ jobs:
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-          # clang matches AlphaDroid's production toolchain (r510928 ~= clang
-          # 14; their defconfig sets CONFIG_LTO/LLVM_POLLY — clang-only).
-          export CC=clang CLANG_TRIPLE=aarch64-linux-gnu-
           # mido_defconfig sets CONFIG_COMPAT=y; 4.9 arch/arm64 hard-errors
           # without a 32-bit cross compiler for the compat vDSO
           export CROSS_COMPILE_ARM32=arm-linux-gnueabihf-
-          make "$DEFCONFIG"
+          # CC=clang MUST be a make ARGUMENT, not an export: their Makefile
+          # hard-assigns CC=$(CROSS_COMPILE)gcc (env loses to file vars), and
+          # CONFIG_LLVM_POLLY=y puts -mllvm -polly into KBUILD_CFLAGS — gcc
+          # rejects -mllvm, so every cc-option probe dies and make aborts with
+          # "Cannot use CONFIG_CC_STACKPROTECTOR_STRONG". Command-line args
+          # override the file assignment; clang then accepts -mllvm. Their
+          # build system (AndroidKernel.mk REAL_CC=...) does the same.
+          MAKE="make CC=clang CLANG_TRIPLE=aarch64-linux-gnu-"
+          $MAKE "$DEFCONFIG"
           # ---- final .config assertions ---------------------------------
           # olddefconfig silently drops symbols whose deps are unmet (it has
           # bitten us twice: SLIMBUS under a missing parent, RTL8XXXU_UNTESTED
@@ -276,8 +281,8 @@ jobs:
           fi
           test "$fail" -eq 0 || exit 1
           # ---- end assertions -------------------------------------------
-          make -j"$(nproc)" Image.gz-dtb
-          make -j"$(nproc)" modules
+          $MAKE -j"$(nproc)" Image.gz-dtb
+          $MAKE -j"$(nproc)" modules
           ls -la arch/arm64/boot/
 
       - name: Assemble AnyKernel3 flashable zip (NetHunter-style)
