@@ -38,6 +38,21 @@ jobs:
           path: kernel
           fetch-depth: 1
 
+      # Tree's fs/exec.c, fs/open.c, fs/stat.c, fs/read_write.c and
+      # drivers/input/input.c call ksu_handle_* unconditionally, but no
+      # KernelSU provider ships in-tree — the link dies on 5 undefined
+      # symbols (run 36445535106). v0.9.5 is the last non-GKI release and
+      # its documented signatures match the tree's externs exactly; its
+      # setup.sh does the drivers/kernelsu symlink + Makefile/Kconfig wiring.
+      - name: Integrate KernelSU v0.9.5 (non-GKI manual hooks)
+        run: |
+          cd kernel
+          curl -LSs --retry 3 "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
+          test -L drivers/kernelsu || { echo "::error::drivers/kernelsu symlink missing"; exit 1; }
+          grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || { echo "::error::drivers/Makefile kernelsu wiring missing"; exit 1; }
+          grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig || { echo "::error::drivers/Kconfig source line missing"; exit 1; }
+          git -C KernelSU describe --tags 2>/dev/null || git -C KernelSU log --oneline -1
+
       - name: Restore AOSP clang cache
         uses: actions/cache@v4
         with:
@@ -268,6 +283,7 @@ jobs:
           # confusing vmlinux link error minutes later.
           fail=0
           for want in \
+            CONFIG_KSU=y \
             CONFIG_SLIMBUS=y \
             CONFIG_SLIMBUS_MSM_NGD=y \
             CONFIG_BTFM_SLIM=y \
